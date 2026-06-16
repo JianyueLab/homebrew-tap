@@ -10,7 +10,7 @@ cask "onedocs" do
   name "OneDocs"
   name "一文亦闻"
   desc "Cross-platform markdown and document reader built with Tauri"
-  homepage "https://github.com/LYOfficial/OneDocs"
+  homepage "https://onedocs.ijune.cn"
 
   livecheck do
     url :url
