@@ -6,9 +6,12 @@ Homebrew tap for JianyueLab projects.
 
 ```bash
 brew tap JianyueLab/tap
+brew trust JianyueLab/tap
 ```
 
-Then install any of the casks/formulae below.
+Then install any of the casks below. The `brew trust` step is not optional for
+casks from a third-party tap: without it Homebrew refuses to load them with
+`Run 'brew trust ...' to trust it`. Undo it with `brew untrust JianyueLab/tap`.
 
 ## Casks
 
@@ -22,18 +25,16 @@ brew install --cask JianyueLab/tap/onedocs
 
 Upstream: <https://github.com/LYOfficial/OneDocs>
 
-## Formulae
-
 ### EuroScope (on macOS, under Wine)
 
 [EuroScope](https://www.euroscope.hu/) is the ATC radar client used on flight-sim
-networks. It is a 32-bit Win32/MFC program with no macOS build, so this formula
+networks. It is a 32-bit Win32/MFC program with no macOS build, so this cask
 installs a launcher that drives it under Wine — the EuroScope binary itself is
 not patched in any way.
 
 ```bash
-brew install JianyueLab/tap/euroscope
-euroscope setup          # Wine + prefix + VC++ runtime + EuroScope
+brew install --cask JianyueLab/tap/euroscope
+euroscope setup          # Wine + prefix + VC++ runtime + EuroScope + DXVK
 euroscope run            # or: euroscope app, for a double-clickable app
 ```
 
@@ -45,8 +46,26 @@ because Wine's macOS build is x86_64. Point it at your sector packages with
 `EUROSCOPE_SECTOR_DIR` and they are mapped to drive `S:` inside the prefix. Run
 `euroscope` with no arguments for the full list of commands and variables.
 
-Two pins inside the formula are deliberate and should not be casually bumped —
-the comments in `Formula/euroscope.rb` spell out the failure modes:
+`brew uninstall --cask euroscope` removes only the launcher. The Wine prefix,
+the app bundle, the logs and the caches are built by `euroscope setup` rather
+than by brew, so they are not cask artifacts — clear them with
+`euroscope uninstall` or `brew zap --cask euroscope`.
+
+**A cask rather than a formula, deliberately.** Homebrew runs
+`fatal_build_from_source_checks` for any formula installed from source, and
+`check_xcode_minimum_version` in that list is fatal whenever `/Applications/
+Xcode.app` is older than the macOS release requires — even though this recipe
+compiles nothing at all. Cask installs run none of those checks, so the cask
+installs on machines where the formula could not.
+
+**Multiple versions are mutually exclusive.** Every euroscope cask shares one
+prefix, one app bundle and one `euroscope` command, so they declare
+`conflicts_with` each other: install one, or the other, not both. The
+implementation is shared — `libexec/euroscope.sh`, substituted per cask at
+install time. **Edit that file, never a cask.**
+
+Two pins are deliberate and should not be casually bumped — the comments in
+`Casks/euroscope.rb` and `libexec/euroscope.sh` spell out the failure modes:
 
 - **Wine** is fetched straight from
   [Gcenx/macOS_Wine_builds](https://github.com/Gcenx/macOS_Wine_builds) rather
