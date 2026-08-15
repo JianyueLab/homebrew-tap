@@ -15,6 +15,16 @@ ES_VERSION="@@VERSION@@"
 ES_TOKEN="@@TOKEN@@"
 MSI="${EUROSCOPE_MSI:-@@MSI@@}"
 
+# The version above is the cask's, so it only describes what is being installed
+# while the cask's own installer is in use. Overriding EUROSCOPE_MSI -- the
+# supported way to install a release euroscope.hu no longer publishes -- would
+# otherwise have every message confidently report the wrong version.
+if [ -n "${EUROSCOPE_MSI:-}" ]; then
+    ES_VERSION_LABEL="$(basename "$MSI")"
+else
+    ES_VERSION_LABEL="$ES_VERSION"
+fi
+
 PREFIX="${EUROSCOPE_PREFIX:-$HOME/.wine-euroscope}"
 ES_DIR="$PREFIX/drive_c/Program Files (x86)/EuroScope"
 ES_EXE="$ES_DIR/EuroScope.exe"
@@ -235,7 +245,7 @@ cmd_setup() {
     fi
 
     if [ ! -f "$ES_EXE" ]; then
-        info "Installing EuroScope $ES_VERSION"
+        info "Installing EuroScope $ES_VERSION_LABEL"
         wine_run msiexec /i "$MSI" /qn
     fi
     [ -f "$ES_EXE" ] || die "EuroScope.exe is not where the installer should have put it"
@@ -361,7 +371,7 @@ LAUNCHER
 }
 
 cmd_status() {
-    echo "EuroScope : ${ES_VERSION}"
+    echo "EuroScope : ${ES_VERSION_LABEL}"
     echo "Wine      : $(find_wine_bin wine 2>/dev/null || echo missing)"
     echo "Rosetta   : $(if [ "$(uname -m)" != arm64 ]; then echo 'n/a (Intel)'; \
                         elif have_rosetta; then echo OK; else echo missing; fi)"

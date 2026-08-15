@@ -8,13 +8,25 @@ cask "euroscope" do
   desc "ATC radar client for flight-sim networks, running under Wine"
   homepage "https://www.euroscope.hu/"
 
-  # One prefix, one app bundle, one `euroscope` command: the versions are
-  # alternatives, not companions, so installing both would have them fight over
-  # ~/.wine-euroscope.
-  conflicts_with cask: "euroscope@3.2.9"
   # A bare symbol means "this version or newer"; the ">= :ventura" string form
   # is deprecated and warns.
   depends_on macos: :ventura
+
+  # There is deliberately no second cask for an older release, and adding one is
+  # not just a matter of writing the file. euroscope.hu publishes exactly one
+  # version at /install/ (3.2.13 today, plus a stray 3.2.3.2); everything else
+  # 404s, and a cask cannot exist without a public url. Mirroring the installer
+  # ourselves to create that url is what the EULA forbids:
+  #
+  #   "Limitations on Redistribution of Software Product. You may not
+  #    redistribute the Software Product in whole or part in any way without the
+  #    express prior written approval of the Developer."
+  #
+  # So an older version needs either that written approval from the developer,
+  # or no cask at all -- point EUROSCOPE_MSI at a copy you obtained yourself and
+  # `euroscope setup` will install it. Should a version reappear upstream, a
+  # cask for it is this file with a new version/sha256 and a conflicts_with
+  # pointing at the other, since they share one prefix and one command.
 
   binary "euroscope"
 

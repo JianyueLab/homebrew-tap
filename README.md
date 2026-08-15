@@ -58,11 +58,29 @@ Xcode.app` is older than the macOS release requires — even though this recipe
 compiles nothing at all. Cask installs run none of those checks, so the cask
 installs on machines where the formula could not.
 
-**Multiple versions are mutually exclusive.** Every euroscope cask shares one
-prefix, one app bundle and one `euroscope` command, so they declare
-`conflicts_with` each other: install one, or the other, not both. The
-implementation is shared — `libexec/euroscope.sh`, substituted per cask at
-install time. **Edit that file, never a cask.**
+**Only the current version can be a cask, and that is a licence limit rather
+than an oversight.** euroscope.hu publishes exactly one release under
+`/install/` — 3.2.13 today, plus a stray 3.2.3.2 — and every other version 404s.
+A cask cannot exist without a public URL, and mirroring the installer to create
+one is exactly what the EULA forbids: *"You may not redistribute the Software
+Product in whole or part in any way without the express prior written approval
+of the Developer."* This cask redistributes nothing; it downloads from the
+official URL.
+
+To run a version euroscope.hu no longer publishes, obtain the installer yourself
+and point `EUROSCOPE_MSI` at it — this is supported, and the output labels
+itself with the installer filename rather than the cask's version:
+
+```bash
+EUROSCOPE_MSI=~/Downloads/EuroScopeSetup.3.2.9.msi euroscope setup
+```
+
+If a version does reappear upstream, a cask for it is this file with a new
+`version`/`sha256` plus `conflicts_with` pointing at the other — every euroscope
+cask shares one prefix, one app bundle and one `euroscope` command, so they are
+alternatives rather than companions. The implementation is shared:
+`libexec/euroscope.sh`, substituted per cask at install time. **Edit that file,
+never a cask.**
 
 Two pins are deliberate and should not be casually bumped — the comments in
 `Casks/euroscope.rb` and `libexec/euroscope.sh` spell out the failure modes:
