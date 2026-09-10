@@ -15,6 +15,16 @@ casks from a third-party tap: without it Homebrew refuses to load them with
 
 ## Casks
 
+### NotchNotch
+
+MacBook Pro notch companion panel with media controls, drop shelf, clipboard history, calendar schedule reminders, and AI agent monitoring.
+
+```bash
+brew install --cask JianyueLab/tap/notchnotch
+```
+
+Upstream: <https://github.com/JianyueLab-Org/notch>
+
 ### OneDocs (一文亦闻)
 
 Cross-platform markdown and document reader.
