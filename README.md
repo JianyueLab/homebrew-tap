@@ -113,3 +113,14 @@ After a new upstream release, bump `version` and update both `sha256` values in 
 gh release view <tag> -R <owner>/<repo> --json assets \
   --jq '.assets[] | select(.name | test("dmg$")) | "\(.name)  \(.digest)"'
 ```
+
+## Checking style
+
+`brew style` only accepts casks inside a tap, so run it against a copy:
+
+```bash
+T="$(brew --repository)/Library/Taps/stylecheck/homebrew-tap"
+mkdir -p "$T" && cp -R Casks libexec "$T"/
+brew style --cask "$T"/Casks/*.rb
+rm -rf "$(dirname "$T")"
+```
