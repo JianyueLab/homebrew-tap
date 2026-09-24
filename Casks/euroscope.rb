@@ -305,11 +305,17 @@ cask "euroscope" do
           link_sector
           wine_wait
 
+          # EuroScope is installed at this point, so a failure here (an
+          # unwritable appdir, say) warns instead of failing setup. It runs as
+          # a child process because bash ignores set -e in a function or
+          # subshell on the left of ||, which would report a broken bundle as built.
+          "$0" app || echo "    Could not build $APP; retry with: euroscope app"
+
           echo
           info "Done. EuroScope is installed at:"
           echo "    $ES_EXE"
           echo
-          echo "Run it with:  euroscope run      (or 'euroscope app' for a double-clickable app)"
+          echo "Open EuroScope.app, or run it here with:  euroscope run"
       }
 
       cmd_run() {
@@ -534,9 +540,10 @@ cask "euroscope" do
 
       Usage: euroscope <command>
 
-        setup [--no-dxvk]  Install Wine, create the prefix, install EuroScope
+        setup [--no-dxvk]  Install Wine, create the prefix, install EuroScope,
+                           build the app
         run                Launch EuroScope in this terminal
-        app                Build /Applications/EuroScope.app
+        app                Rebuild /Applications/EuroScope.app
         status             Show what is installed and whether it is running
         fsd-server         Run the bundled offline FSD server
         uninstall          Remove the prefix, the app, logs and caches
@@ -590,8 +597,8 @@ cask "euroscope" do
 
         softwareupdate --install-rosetta --agree-to-license
 
-      Then launch it with `euroscope run`, or build a double-clickable app with
-      `euroscope app`. Point it at your sector packages by exporting
+      Setup also builds EuroScope.app in /Applications; open that, or run
+      `euroscope run` in a terminal. Point it at your sector packages by exporting
       EUROSCOPE_SECTOR_DIR before running setup; they get mapped to drive S:.
 
       `euroscope` on its own lists every command. Note that `brew uninstall`
