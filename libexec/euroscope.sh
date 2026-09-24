@@ -60,6 +60,11 @@ DXVK_MARKER='v1.10.3-async (macOS)'
 
 VC_BASE="https://aka.ms/vs/17/release"
 
+# Wine's fixme/err channels and MoltenVK's info banner are noise to anyone not
+# debugging Wine itself; set either variable to get them back.
+export WINEDEBUG="${WINEDEBUG:--all}"
+export MVK_CONFIG_LOG_LEVEL="${MVK_CONFIG_LOG_LEVEL:-1}"
+
 die() { echo "Error: $*" >&2; exit 1; }
 info() { echo "==> $*"; }
 
@@ -82,6 +87,14 @@ wine_run() {
     local w
     w="$(find_wine_bin wine)" || die "Wine not found. Run: euroscope setup"
     WINEPREFIX="$PREFIX" /usr/bin/arch -x86_64 "$w" "$@"
+}
+
+# Wine leaves services running in the background after a command returns, and
+# they keep writing to the terminal after the shell prompt is back.
+wine_wait() {
+    local ws
+    ws="$(find_wine_bin wineserver 2>/dev/null)" || return 0
+    WINEPREFIX="$PREFIX" /usr/bin/arch -x86_64 "$ws" -w >/dev/null 2>&1 || true
 }
 
 wine_kill() {
@@ -252,6 +265,7 @@ cmd_setup() {
 
     [ "$want_dxvk" = 1 ] && install_dxvk
     link_sector
+    wine_wait
 
     echo
     info "Done. EuroScope is installed at:"
@@ -266,7 +280,6 @@ cmd_run() {
     # Without a writable cache path DXVK recompiles every pipeline on each
     # launch, since it writes .dxvk-cache next to the working directory.
     export DXVK_STATE_CACHE_PATH="$DXVK_CACHE"
-    export WINEDEBUG="${WINEDEBUG:--all}"
     export MVK_CONFIG_FAST_MATH_ENABLED=1
     info "Starting EuroScope (prefix: $PREFIX)"
     cd "$ES_DIR"
@@ -275,9 +288,66 @@ cmd_run() {
 
 cmd_fsd_server() {
     [ -f "$FSD_EXE" ] || die "EuroScope is not installed. Run: euroscope setup"
-    export WINEDEBUG="${WINEDEBUG:--all}"
     info "Starting the bundled EuroScope FSD server"
     wine_run "$FSD_EXE" "$@"
+}
+
+# Converts the icon embedded in EuroScope.exe to an .icns. Only stock macOS
+# tools: perl reads the PE resources, sips and iconutil do the rest.
+build_icon() {
+    local out="$1" tmp s rc=0
+    tmp="$(mktemp -d)"
+    mkdir -p "$tmp/icon.iconset"
+    # Writes the largest image of the first icon group as a one-image .ico.
+    /usr/bin/perl - "$ES_EXE" "$tmp/icon.ico" <<'PERL' || rc=1
+use strict; use warnings;
+my ($exe, $out) = @ARGV;
+open my $fh, '<:raw', $exe or die "open $exe: $!\n";
+my $d = do { local $/; <$fh> };
+sub u16 { unpack 'v', substr $d, $_[0], 2 }
+sub u32 { unpack 'V', substr $d, $_[0], 4 }
+my $pe = u32(0x3c);
+die "not a PE file\n" unless substr($d, $pe, 4) eq "PE\0\0";
+my $opt = $pe + 24;
+my $rsrc = u32($opt + (u16($opt) == 0x20b ? 112 : 96) + 16) or die "no resources\n";
+my @sec = map { my $s = $opt + u16($pe + 20) + 40 * $_;
+                [u32($s + 12), u32($s + 8) || u32($s + 16), u32($s + 20)] } 0 .. u16($pe + 6) - 1;
+sub off { my $r = shift;
+          for (@sec) { return $r - $_->[0] + $_->[2] if $r >= $_->[0] && $r < $_->[0] + $_->[1] }
+          die "rva $r not in any section\n" }
+my $root = off($rsrc);
+sub entries { my $dir = shift; my $n = u16($dir + 12) + u16($dir + 14);
+              map { [u32($dir + 16 + 8 * $_), u32($dir + 20 + 8 * $_) & 0x7fffffff] } 0 .. $n - 1 }
+# [id, file offset, size] per resource of a type, first language only.
+sub leaves { my $type = shift;
+    my ($t) = grep { $_->[0] == $type } entries($root) or return ();
+    map { my ($lang) = entries($root + $_->[1]); my $e = $root + $lang->[1];
+          [$_->[0], off(u32($e)), u32($e + 4)] } entries($root + $t->[1]) }
+my %icon = map { $_->[0] => $_ } leaves(3);    # RT_ICON
+my ($group) = leaves(14) or die "no icon\n";   # RT_GROUP_ICON
+my $g = $group->[1];
+# [width (0 means 256), bit count, icon id, entry offset]
+my @img = map { my $e = $g + 6 + 14 * $_;
+                [unpack('C', substr $d, $e, 1) || 256, u16($e + 6), u16($e + 12), $e] } 0 .. u16($g + 4) - 1;
+my ($best) = sort { $b->[0] <=> $a->[0] || $b->[1] <=> $a->[1] } grep { $icon{$_->[2]} } @img
+    or die "no icon\n";
+my $i = $icon{$best->[2]};
+open my $o, '>:raw', $out or die "open $out: $!\n";
+print $o pack('vvv', 0, 1, 1), substr($d, $best->[3], 12), pack('V', 22), substr($d, $i->[1], $i->[2]);
+PERL
+    if [ "$rc" = 0 ]; then
+        sips -s format png "$tmp/icon.ico" --out "$tmp/icon.png" >/dev/null 2>&1 || rc=1
+    fi
+    if [ "$rc" = 0 ]; then
+        # EuroScope's largest icon is 256px, so nothing above that is generated.
+        for s in 16:16 16@2x:32 32:32 32@2x:64 128:128 128@2x:256 256:256; do
+            sips -z "${s#*:}" "${s#*:}" "$tmp/icon.png" \
+                --out "$tmp/icon.iconset/icon_${s%%[:@]*}x${s%%:*}.png" >/dev/null 2>&1 || rc=1
+        done
+    fi
+    [ "$rc" = 0 ] && { iconutil -c icns "$tmp/icon.iconset" -o "$out" 2>/dev/null || rc=1; }
+    rm -rf "$tmp"
+    return "$rc"
 }
 
 cmd_app() {
