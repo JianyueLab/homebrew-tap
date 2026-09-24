@@ -64,7 +64,10 @@ cask "euroscope" do
       ES_DIR="$PREFIX/drive_c/Program Files (x86)/EuroScope"
       ES_EXE="$ES_DIR/EuroScope.exe"
       FSD_EXE="$ES_DIR/EuroScopeFsdServer.exe"
-      APP="${EUROSCOPE_APP_DIR:-$HOME/Applications/EuroScope.app}"
+      # {{appdir}} is Homebrew's cask appdir: /Applications unless --appdir says otherwise.
+      APP="${EUROSCOPE_APP_DIR:-{{appdir}}/EuroScope.app}"
+      # Where `euroscope app` built the bundle before it moved to the appdir.
+      LEGACY_APP="$HOME/Applications/EuroScope.app"
       CACHE="${EUROSCOPE_CACHE_DIR:-$HOME/.cache/euroscope}"
       DXVK_CACHE="$CACHE/dxvk"
       SECTOR_DIR="${EUROSCOPE_SECTOR_DIR:-}"
@@ -334,7 +337,7 @@ cask "euroscope" do
           tmp="$(mktemp -d)"
           mkdir -p "$tmp/icon.iconset"
           # Writes the largest image of the first icon group as a one-image .ico.
-          /usr/bin/perl - "$ES_EXE" "$tmp/icon.ico" <<'PERL' || rc=1
+          /usr/bin/perl - "$ES_EXE" "$tmp/icon.ico" 2>/dev/null <<'PERL' || rc=1
       use strict; use warnings;
       my ($exe, $out) = @ARGV;
       open my $fh, '<:raw', $exe or die "open $exe: $!\n";
@@ -383,6 +386,15 @@ cask "euroscope" do
           [ "$rc" = 0 ] && { iconutil -c icns "$tmp/icon.iconset" -o "$out" 2>/dev/null || rc=1; }
           rm -rf "$tmp"
           return "$rc"
+      }
+
+      # Removes a bundle left at the old location, but only one this script built.
+      remove_legacy_app() {
+          [ "$LEGACY_APP" != "$APP" ] || return 0
+          [ "$(defaults read "$LEGACY_APP/Contents/Info" CFBundleIdentifier 2>/dev/null)" = hu.euroscope.EuroScope ] ||
+              return 0
+          info "Removing the old $LEGACY_APP"
+          rm -rf "$LEGACY_APP"
       }
 
       cmd_app() {
@@ -481,6 +493,7 @@ cask "euroscope" do
       LAUNCHER
           chmod +x "$APP/Contents/MacOS/EuroScope"
           touch "$APP"
+          remove_legacy_app
           info "Built $APP"
           echo "Double-click it, or drag it to the Dock."
       }
@@ -505,6 +518,7 @@ cask "euroscope" do
           sleep 1
           info "Removing $APP"
           rm -rf "$APP"
+          remove_legacy_app
           info "Removing logs and caches"
           rm -rf "$HOME/Library/Logs/EuroScope" "$CACHE"
           info "Removing prefix $PREFIX"
@@ -522,7 +536,7 @@ cask "euroscope" do
 
         setup [--no-dxvk]  Install Wine, create the prefix, install EuroScope
         run                Launch EuroScope in this terminal
-        app                Build ~/Applications/EuroScope.app
+        app                Build /Applications/EuroScope.app
         status             Show what is installed and whether it is running
         fsd-server         Run the bundled offline FSD server
         uninstall          Remove the prefix, the app, logs and caches
@@ -554,6 +568,7 @@ cask "euroscope" do
   # `euroscope setup` rather than by brew, so they are not cask artifacts and
   # only a zap can take them.
   zap trash: [
+    "/Applications/EuroScope.app",
     "~/.cache/euroscope",
     "~/.wine-euroscope",
     "~/Applications/EuroScope.app",
