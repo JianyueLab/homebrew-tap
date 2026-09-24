@@ -5,8 +5,7 @@ cask "onedocs" do
   sha256 arm:   "3619b2879bd35f039c32177bdf307097f33e540bdf1067c56bbd5815b160df75",
          intel: "a64f9eb648d5fc66f7c6e420b6d37a2a990feea81f938336bd258117118d52d9"
 
-  url "https://github.com/LYOfficial/OneDocs/releases/download/v#{version}/OneDocs_#{version}_#{arch}.dmg",
-      verified: "github.com/LYOfficial/OneDocs/"
+  url "https://github.com/LYOfficial/OneDocs/releases/download/v#{version}/OneDocs_#{version}_#{arch}.dmg"
   name "OneDocs"
   name "一文亦闻"
   desc "Cross-platform markdown and document reader built with Tauri"
