@@ -45,7 +45,7 @@ not patched in any way.
 ```bash
 brew install --cask JianyueLab/tap/euroscope
 euroscope setup          # Wine + prefix + VC++ runtime + EuroScope + DXVK
-euroscope run            # or: euroscope app, for a double-clickable app
+euroscope run            # or: euroscope app, to build EuroScope.app in /Applications
 ```
 
 `brew install` downloads the official installer from euroscope.hu and checksums
