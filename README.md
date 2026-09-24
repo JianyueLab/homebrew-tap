@@ -88,12 +88,11 @@ EUROSCOPE_MSI=~/Downloads/EuroScopeSetup.3.2.9.msi euroscope setup
 If a version does reappear upstream, a cask for it is this file with a new
 `version`/`sha256` plus `conflicts_with` pointing at the other — every euroscope
 cask shares one prefix, one app bundle and one `euroscope` command, so they are
-alternatives rather than companions. The implementation is shared:
-`libexec/euroscope.sh`, substituted per cask at install time. **Edit that file,
-never a cask.**
+alternatives rather than companions. The launcher script is inline in
+`Casks/euroscope.rb`, since install steps cannot read files from the tap.
 
 Two pins are deliberate and should not be casually bumped — the comments in
-`Casks/euroscope.rb` and `libexec/euroscope.sh` spell out the failure modes:
+`Casks/euroscope.rb` spell out the failure modes:
 
 - **Wine** is fetched straight from
   [Gcenx/macOS_Wine_builds](https://github.com/Gcenx/macOS_Wine_builds) rather
@@ -120,7 +119,7 @@ gh release view <tag> -R <owner>/<repo> --json assets \
 
 ```bash
 T="$(brew --repository)/Library/Taps/stylecheck/homebrew-tap"
-mkdir -p "$T" && cp -R Casks libexec "$T"/
+mkdir -p "$T" && cp -R Casks "$T"/
 brew style --cask "$T"/Casks/*.rb
 rm -rf "$(dirname "$T")"
 ```
