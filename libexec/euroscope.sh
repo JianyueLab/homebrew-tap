@@ -372,9 +372,19 @@ cmd_app() {
 	<key>CFBundleShortVersionString</key>	<string>3.2.13</string>
 	<key>LSMinimumSystemVersion</key>	<string>13.0</string>
 	<key>NSHighResolutionCapable</key>	<true/>
+	<key>CFBundleIconFile</key>	<string>EuroScope</string>
+	<key>LSUIElement</key>	<true/>
 </dict>
 </plist>
 PLIST
+
+    # LSUIElement keeps this launcher out of the Dock. EuroScope.exe is spawned
+    # by wineserver rather than as a child of the launcher, so it always gets a
+    # Dock tile of its own, with EuroScope's icon; the launcher's would be a
+    # second, blank one.
+    mkdir -p "$APP/Contents/Resources"
+    build_icon "$APP/Contents/Resources/EuroScope.icns" ||
+        echo "    Could not extract EuroScope's icon; the app will use a generic one."
 
     # The launcher re-derives everything itself so the app keeps working even
     # if this CLI is uninstalled.
