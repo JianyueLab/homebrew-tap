@@ -1,6 +1,6 @@
 cask "notchnotch" do
-  version "1.0.0"
-  sha256 "5091fd5bbcacfd9e9823ee04000bf053938d0b1ee45b3e881cefe316fa157b01"
+  version "27.1.3"
+  sha256 "7ac35699fc7dd49aa3c67af4d0734019a01bf83fa23e77ad0b824dbccbdfdb82"
 
   url "https://github.com/JianyueLab-Org/notch/releases/download/v#{version}/NotchNotch-#{version}.zip"
   name "NotchNotch"
