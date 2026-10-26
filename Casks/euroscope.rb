@@ -61,6 +61,7 @@ cask "euroscope" do
       fi
 
       PREFIX="${EUROSCOPE_PREFIX:-$HOME/.wine-euroscope}"
+      case "$PREFIX" in /*) ;; *) PREFIX="$PWD/$PREFIX" ;; esac
       ES_DIR="$PREFIX/drive_c/Program Files (x86)/EuroScope"
       ES_EXE="$ES_DIR/EuroScope.exe"
       FSD_EXE="$ES_DIR/EuroScopeFsdServer.exe"
@@ -69,6 +70,7 @@ cask "euroscope" do
       # Where `euroscope app` built the bundle before it moved to the appdir.
       LEGACY_APP="$HOME/Applications/EuroScope.app"
       CACHE="${EUROSCOPE_CACHE_DIR:-$HOME/.cache/euroscope}"
+      case "$CACHE" in /*) ;; *) CACHE="$PWD/$CACHE" ;; esac
       DXVK_CACHE="$CACHE/dxvk"
       SECTOR_DIR="${EUROSCOPE_SECTOR_DIR:-}"
       SECTOR_DRIVE="${EUROSCOPE_SECTOR_DRIVE:-s}"
@@ -239,6 +241,9 @@ cask "euroscope" do
 
       link_sector() {
           [ -n "$SECTOR_DIR" ] || return 0
+          if [ -d "$SECTOR_DIR" ]; then
+              SECTOR_DIR="$(cd "$SECTOR_DIR" && pwd -P)"
+          fi
           local link="$PREFIX/dosdevices/${SECTOR_DRIVE}:"
           # An uninitialised checkout is an empty directory that still passes -d;
           # mapping the drive at it yields a drive with nothing on it.
@@ -265,6 +270,12 @@ cask "euroscope" do
           esac
 
           [ -f "$MSI" ] || die "installer not found at $MSI"
+          local installer_sha receipt="$PREFIX/.euroscope-installer-sha256"
+          installer_sha="$(shasum -a 256 "$MSI" | awk '{print $1}')"
+          if [ -f "$ES_EXE" ] &&
+             { [ ! -f "$receipt" ] || [ "$(cat "$receipt")" != "$installer_sha" ]; }; then
+              die "Existing EuroScope installation has a different or untracked installer. Use a fresh prefix with EUROSCOPE_PREFIX=/path/to/new-prefix; keep the old prefix and migrate your settings manually."
+          fi
           require_rosetta
           install_wine
 
@@ -298,8 +309,15 @@ cask "euroscope" do
           if [ ! -f "$ES_EXE" ]; then
               info "Installing EuroScope $ES_VERSION_LABEL"
               wine_run msiexec /i "$MSI" /qn
+              if [ -n "${EUROSCOPE_MSI:-}" ]; then
+                  rm -f "$PREFIX/.euroscope-version"
+              fi
           fi
           [ -f "$ES_EXE" ] || die "EuroScope.exe is not where the installer should have put it"
+          printf '%s\n' "$installer_sha" > "$receipt"
+          if [ -z "${EUROSCOPE_MSI:-}" ]; then
+              printf '%s\n' "$ES_VERSION" > "$PREFIX/.euroscope-version"
+          fi
 
           [ "$want_dxvk" = 1 ] && install_dxvk
           link_sector
@@ -403,16 +421,31 @@ cask "euroscope" do
           rm -rf "$LEGACY_APP"
       }
 
+      owned_app() {
+          case "$1" in *.app) ;; *) return 1 ;; esac
+          [ ! -L "$1" ] && [ -d "$1/Contents" ] &&
+              [ "$(defaults read "$1/Contents/Info" CFBundleIdentifier 2>/dev/null)" = hu.euroscope.EuroScope ]
+      }
+
       cmd_app() {
           [ -f "$ES_EXE" ] || die "EuroScope is not installed. Run: euroscope setup"
           case "$APP" in *.app) ;; *) die "refusing to build at $APP" ;; esac
-          [ -e "$APP" ] && [ ! -d "$APP/Contents" ] &&
-              die "$APP exists and is not an app bundle"
+          if [ -e "$APP" ] || [ -L "$APP" ]; then
+              owned_app "$APP" || die "refusing to replace an unowned app bundle at $APP"
+          fi
 
           rm -rf "$APP"
           mkdir -p "$APP/Contents/MacOS"
+          local version_xml="" installed_version="" resolved_wine
+          if [ -f "$PREFIX/.euroscope-version" ]; then
+              installed_version="$(cat "$PREFIX/.euroscope-version")"
+              if [[ "$installed_version" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
+                  version_xml="<key>CFBundleShortVersionString</key><string>$installed_version</string>"
+              fi
+          fi
+          resolved_wine="$(find_wine_bin wine || true)"
 
-          cat > "$APP/Contents/Info.plist" <<'PLIST'
+          cat > "$APP/Contents/Info.plist" <<PLIST
       <?xml version="1.0" encoding="UTF-8"?>
       <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
       <plist version="1.0">
@@ -422,7 +455,7 @@ cask "euroscope" do
       	<key>CFBundleIdentifier</key>	<string>hu.euroscope.EuroScope</string>
       	<key>CFBundleExecutable</key>	<string>EuroScope</string>
       	<key>CFBundlePackageType</key>	<string>APPL</string>
-      	<key>CFBundleShortVersionString</key>	<string>3.2.13</string>
+      	$version_xml
       	<key>LSMinimumSystemVersion</key>	<string>13.0</string>
       	<key>NSHighResolutionCapable</key>	<true/>
       	<key>CFBundleIconFile</key>	<string>EuroScope</string>
@@ -439,12 +472,11 @@ cask "euroscope" do
           build_icon "$APP/Contents/Resources/EuroScope.icns" ||
               echo "    Could not extract EuroScope's icon; the app will use a generic one."
 
-          # The launcher re-derives everything itself so the app keeps working even
-          # if this CLI is uninstalled.
-          cat > "$APP/Contents/MacOS/EuroScope" <<'LAUNCHER'
-      #!/usr/bin/env bash
-      set -euo pipefail
-      PREFIX="${EUROSCOPE_PREFIX:-$HOME/.wine-euroscope}"
+          # Persist setup's paths and resolved Wine binary for Finder launches.
+          {
+              printf '#!/usr/bin/env bash\nset -euo pipefail\n'
+              printf 'PREFIX=%q\nCACHE_DIR=%q\nRESOLVED_WINE_BIN=%q\n' "$PREFIX" "$DXVK_CACHE" "$resolved_wine"
+              cat <<'LAUNCHER'
       ES_DIR="$PREFIX/drive_c/Program Files (x86)/EuroScope"
       EXE="$ES_DIR/EuroScope.exe"
       LOG_DIR="$HOME/Library/Logs/EuroScope"
@@ -457,11 +489,17 @@ cask "euroscope" do
       }
       find_wine_bin() {
           local n="${1:-wine}" c d
+          if [ -n "$RESOLVED_WINE_BIN" ]; then
+              c="$(dirname "$RESOLVED_WINE_BIN")/$n"
+              [ -x "$c" ] && { printf '%s' "$c"; return 0; }
+          fi
           c="$(command -v "$n" 2>/dev/null || true)"
           [ -n "$c" ] && { printf '%s' "$c"; return 0; }
           for d in /opt/homebrew/bin /usr/local/bin \
                    "/Applications/Wine Stable.app/Contents/Resources/wine/bin" \
-                   "$HOME/Applications/Wine Stable.app/Contents/Resources/wine/bin"; do
+                   "$HOME/Applications/Wine Stable.app/Contents/Resources/wine/bin" \
+                   "/Applications/Wine Devel.app/Contents/Resources/wine/bin" \
+                   "/Applications/Wine Staging.app/Contents/Resources/wine/bin"; do
               [ -x "$d/$n" ] && { printf '%s' "$d/$n"; return 0; }
           done
           return 1
@@ -482,7 +520,6 @@ cask "euroscope" do
       sleep 1
 
       echo "== $(date '+%Y-%m-%d %H:%M:%S') EuroScope starting (wine: $WINE_BIN)" >> "$LOG"
-      CACHE_DIR="$HOME/.cache/euroscope/dxvk"
       mkdir -p "$CACHE_DIR"
       export WINEPREFIX="$PREFIX"
       # The app's working directory is /, where DXVK cannot write its .dxvk-cache.
@@ -497,6 +534,7 @@ cask "euroscope" do
       [ -n "$WS" ] && WINEPREFIX="$PREFIX" /usr/bin/arch -x86_64 "$WS" -k >/dev/null 2>&1 || true
       exit 0
       LAUNCHER
+          } > "$APP/Contents/MacOS/EuroScope"
           chmod +x "$APP/Contents/MacOS/EuroScope"
           touch "$APP"
           remove_legacy_app
@@ -522,8 +560,12 @@ cask "euroscope" do
           info "Stopping EuroScope"
           wine_kill
           sleep 1
-          info "Removing $APP"
-          rm -rf "$APP"
+          if owned_app "$APP"; then
+              info "Removing $APP"
+              rm -rf "$APP"
+          else
+              info "Leaving unowned or non-bundle path $APP"
+          fi
           remove_legacy_app
           info "Removing logs and caches"
           rm -rf "$HOME/Library/Logs/EuroScope" "$CACHE"
@@ -552,7 +594,7 @@ cask "euroscope" do
         EUROSCOPE_PREFIX       Wine prefix           (default ~/.wine-euroscope)
         EUROSCOPE_SECTOR_DIR   Sector packages to map to a drive letter
         EUROSCOPE_SECTOR_DRIVE Drive letter for them (default s)
-        EUROSCOPE_APP_DIR      Where to build the app bundle
+        EUROSCOPE_APP_DIR      Complete bundle path (default /Applications/EuroScope.app)
         EUROSCOPE_MSI          Use a different EuroScope installer
       EOF
       }

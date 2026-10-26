@@ -1,6 +1,6 @@
 cask "notchnotch" do
-  version "27.1.5"
-  sha256 "91c648544ea3787ffeaa49ab93b3557f1d9978bff71efc05d1270f76ed0c950d"
+  version "27.1.7"
+  sha256 "d3679fc76a91cd1a1c32f1778b804d330aa108c35a584716288e7a51a6d37175"
 
   url "https://github.com/JianyueLab-Org/notch/releases/download/v#{version}/NotchNotch-#{version}.zip"
   name "NotchNotch"
@@ -13,6 +13,7 @@ cask "notchnotch" do
   end
 
   depends_on macos: :ventura
+  depends_on arch: :arm64
 
   app "NotchNotch.app"
 
