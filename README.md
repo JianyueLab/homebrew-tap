@@ -23,6 +23,8 @@ MacBook Pro notch companion panel with media controls, drop shelf, clipboard his
 brew install --cask JianyueLab/tap/notchnotch
 ```
 
+The published archive is Apple Silicon only. Intel hosts are not supported.
+
 Upstream: <https://github.com/JianyueLab-Org/notch>
 
 ### OneDocs (一文亦闻)
@@ -56,6 +58,12 @@ because Wine's macOS build is x86_64. Point it at your sector packages with
 `EUROSCOPE_SECTOR_DIR` and they are mapped to drive `S:` inside the prefix. Run
 `euroscope` with no arguments for the full list of commands and variables.
 
+`EUROSCOPE_APP_DIR` is the complete bundle path, for example
+`$HOME/Applications/EuroScope.app`, not an Applications directory.
+The generated bundle records the prefix, cache directory and resolved Wine
+binary used by `euroscope app`; Finder does not need those shell variables.
+Uninstall removes that bundle only when its bundle identifier is EuroScope's.
+
 `brew uninstall --cask euroscope` removes only the launcher. The Wine prefix,
 the app bundle, the logs and the caches are built by `euroscope setup` rather
 than by brew, so they are not cask artifacts — clear them with
@@ -85,6 +93,17 @@ itself with the installer filename rather than the cask's version:
 EUROSCOPE_MSI=~/Downloads/EuroScopeSetup.3.2.9.msi euroscope setup
 ```
 
+Setup records the selected installer's SHA-256 in the prefix. Repeating setup
+with the same installer preserves the installation. A different installer, or
+an existing installation without a receipt, is refused before setup mutates
+the prefix. Select a fresh `EUROSCOPE_PREFIX` and migrate your settings manually;
+the old prefix is not deleted.
+
+Bundle version metadata comes from the installed version receipt. A custom
+installer with an unknown version omits `CFBundleShortVersionString`; its
+filename is a display label, not a macOS version number. Rebuild the bundle
+with `euroscope app` after selecting the intended prefix.
+
 If a version does reappear upstream, a cask for it is this file with a new
 `version`/`sha256` plus `conflicts_with` pointing at the other — every euroscope
 cask shares one prefix, one app bundle and one `euroscope` command, so they are
@@ -106,12 +125,63 @@ Two pins are deliberate and should not be casually bumped — the comments in
 
 ## Updating a cask
 
-After a new upstream release, bump `version` and update both `sha256` values in `Casks/<name>.rb`. Get the digests from the GitHub release page or with:
+Each cask has its own artifact source and checksum count. Set `VERSION` to
+the upstream release being reviewed. Download into a project-local scratch
+directory, then hash the exact asset served by the cask URL.
+
+OneDocs uses **two** DMGs, one for each architecture:
 
 ```bash
-gh release view <tag> -R <owner>/<repo> --json assets \
-  --jq '.assets[] | select(.name | test("dmg$")) | "\(.name)  \(.digest)"'
+VERSION=2.0.0
+for ARCH in aarch64 x64; do
+  FILE="OneDocs_${VERSION}_${ARCH}.dmg"
+  curl --fail --location --output ".temp/$FILE" \
+    "https://github.com/LYOfficial/OneDocs/releases/download/v${VERSION}/${FILE}"
+  shasum -a 256 ".temp/$FILE"
+done
 ```
+
+NotchNotch uses **one** ZIP (arm64):
+
+```bash
+VERSION=27.1.7
+FILE="NotchNotch-${VERSION}.zip"
+curl --fail --location --output ".temp/$FILE" \
+  "https://github.com/JianyueLab-Org/notch/releases/download/v${VERSION}/${FILE}"
+shasum -a 256 ".temp/$FILE"
+```
+
+EuroScope uses **one** MSI from euroscope.hu, not a GitHub release:
+
+```bash
+VERSION=3.2.13
+FILE="EuroScopeSetup.${VERSION}.msi"
+curl --fail --location --output ".temp/$FILE" \
+  "https://euroscope.hu/install/${FILE}"
+shasum -a 256 ".temp/$FILE"
+```
+
+Create `.temp` before these commands and remove the downloaded files afterwards.
+Update `version` and the corresponding `sha256` field(s). Review release notes,
+the archive's actual architecture, and its installed version before release.
+
+## Launcher regression checks
+
+From the enclosing workspace, use an isolated project-local scratch directory:
+
+```bash
+TMPDIR="$PWD/.temp/audit-fixes-2026-10-26/Distribution" \
+  ruby homebrew-tap/test/euroscope_test.rb
+```
+
+The check renders the embedded launcher and exercises filesystem behavior under
+an isolated HOME. It does not install Wine or run a Windows application.
+Linux can check Ruby/Bash and filesystem behavior, not Finder, macOS app
+metadata interpretation, Rosetta, Swift builds, signing, or notarization.
+Before release on macOS, check the generated plist with `plutil -lint`,
+launch the bundle from Finder without shell environment overrides, and verify
+Wine discovery and the selected prefix. Homebrew install, uninstall, and trust
+changes require operator approval.
 
 ## Checking style
 
