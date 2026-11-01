@@ -167,11 +167,10 @@ the archive's actual architecture, and its installed version before release.
 
 ## Launcher regression checks
 
-From the enclosing workspace, use an isolated project-local scratch directory:
+From the tap repository, use an isolated project-local scratch directory:
 
 ```bash
-TMPDIR="$PWD/.temp/audit-fixes-2026-10-26/Distribution" \
-  ruby homebrew-tap/test/euroscope_test.rb
+TMPDIR="$PWD/.temp/launcher-check" ruby test/euroscope_test.rb
 ```
 
 The check renders the embedded launcher and exercises filesystem behavior under
